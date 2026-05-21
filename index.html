@@ -1,0 +1,88 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>开发信生成器 - 浙江华普新材</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.container{background:#fff;border-radius:16px;padding:40px;max-width:680px;width:100%;box-shadow:0 25px 60px rgba(0,0,0,0.3)}
+.header{text-align:center;margin-bottom:32px}
+.header h1{font-size:22px;color:#1e293b;margin-bottom:6px}
+.header .company{font-size:14px;color:#64748b}
+.form-group{margin-bottom:20px}
+.form-group label{display:block;font-size:13px;font-weight:600;color:#334155;margin-bottom:6px}
+.form-group input,.form-group select{width:100%;padding:12px 16px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:15px;color:#1e293b;transition:border-color .2s,box-shadow .2s;outline:none;background:#f8fafc}
+.form-group input:focus,.form-group select:focus{border-color:#6366f1;box-shadow:0 0 0 3px rgba(99,102,241,0.15);background:#fff}
+.btn{width:100%;padding:14px;background:linear-gradient(135deg,#6366f1 0%,#4f46e5 100%);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;transition:opacity .2s,transform .1s;margin-top:8px}
+.btn:hover{opacity:.92}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.6;cursor:not-allowed}
+.result{margin-top:28px;padding:20px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;display:none;white-space:pre-wrap;font-size:14px;line-height:1.7;color:#334155;max-height:500px;overflow-y:auto}
+.result.show{display:block}
+.spinner{display:none;text-align:center;margin-top:20px;color:#6366f1;font-size:14px}
+.spinner.show{display:block}
+.spinner::before{content:'';display:inline-block;width:16px;height:16px;border:2px solid #6366f1;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:8px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<h1>📧 开发信智能生成</h1>
+<p class="company">Zhejiang Huapu New Materials Co., Ltd.</p>
+</div>
+<form id="letterForm">
+<div class="form-group">
+<label>客户名字 / Customer Name</label>
+<input type="text" id="customerName" placeholder="例: John Smith" required>
+</div>
+<div class="form-group">
+<label>客户公司 / Customer Company</label>
+<input type="text" id="customerCompany" placeholder="例: ABC Trading Co., Ltd." required>
+</div>
+<div class="form-group">
+<label>我们产品 / Our Product</label>
+<input type="text" id="productName" placeholder="例: PPGI / Galvalume Steel Coil" required>
+</div>
+<div class="form-group">
+<label>语言 / Language</label>
+<select id="language" required>
+<option value="en">English 英文</option>
+<option value="zh">中文 Chinese</option>
+<option value="es">Español 西班牙语</option>
+<option value="fr">Français 法语</option>
+<option value="ar">العربية 阿拉伯语</option>
+<option value="ru">Русский 俄语</option>
+</select>
+</div>
+<button type="submit" class="btn" id="submitBtn">生成开发信</button>
+</form>
+<div class="spinner" id="spinner">正在搜索并生成开发信...</div>
+<div class="result" id="result"></div>
+</div>
+<script>
+document.getElementById('letterForm').addEventListener('submit',async(e)=>{
+e.preventDefault();
+const btn=document.getElementById('submitBtn');
+const spinner=document.getElementById('spinner');
+const result=document.getElementById('result');
+btn.disabled=true;spinner.classList.add('show');result.classList.remove('show');
+const data={
+customer_name:document.getElementById('customerName').value.trim(),
+customer_company:document.getElementById('customerCompany').value.trim(),
+product_name:document.getElementById('productName').value.trim(),
+language:document.getElementById('language').value
+};
+try{
+const res=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+const json=await res.json();
+if(json.success){result.textContent=json.letter}else{result.textContent='❌ 生成失败: '+(json.error||'未知错误')}
+result.classList.add('show')
+}catch(err){result.textContent='❌ 网络错误: '+err.message;result.classList.add('show')}
+finally{btn.disabled=false;spinner.classList.remove('show')}
+})
+</script>
+</body>
+</html>
