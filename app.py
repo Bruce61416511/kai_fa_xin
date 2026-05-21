@@ -159,6 +159,7 @@ Write the email in {lang_name}. Make it personalized, professional, and effectiv
         return letter
     except Exception as e:
         logger.error(f"LLM call failed: {e}")
+        # 保底执行模板生成，确保用户体验不受影响(即使没有大模型连接上来)
         return generate_fallback_letter(customer_name, customer_company, product_name, language)
 
 
