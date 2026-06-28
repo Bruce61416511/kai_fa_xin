@@ -2,6 +2,7 @@
 import os
 import re
 import logging
+from pathlib import Path
 from flask import Flask, request, jsonify, send_from_directory
 from openai import OpenAI
 
@@ -23,16 +24,29 @@ LANGUAGE_MAP = {
     "ru": "Russian (Русский)",
 }
 
-client = None
-api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
-api_base = os.environ.get("OPENAI_BASE_URL") or os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com"
-model = os.environ.get("LLM_MODEL") or "deepseek-chat"
+# --- Settings (persisted to JSON file) ---
+SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
-if api_key:
-    client = OpenAI(api_key=api_key, base_url=api_base)
-    logger.info(f"LLM client initialized: model={model}, base_url={api_base}")
-else:
-    logger.warning("No API key found. Set OPENAI_API_KEY or DEEPSEEK_API_KEY environment variable.")
+def load_settings():
+    if SETTINGS_FILE.exists():
+        try:
+            return json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        except:
+            pass
+    return {}
+
+def save_settings(data):
+    SETTINGS_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+def get_llm_client():
+    """Create OpenAI client from settings, fallback to env vars."""
+    settings = load_settings()
+    api_key = settings.get("api_key") or os.environ.get("OPENAI_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
+    api_base = settings.get("base_url") or os.environ.get("OPENAI_BASE_URL") or os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com"
+    model = settings.get("model") or os.environ.get("LLM_MODEL") or "deepseek-chat"
+    if not api_key:
+        return None, model
+    return OpenAI(api_key=api_key, base_url=api_base), model
 
 
 SYSTEM_PROMPT = """You are a professional business development specialist working for {company_name}.
@@ -94,7 +108,112 @@ def generate_fallback_letter(customer_name, customer_company, product_name, lang
 {COMPANY_NAME_ZH}
 电话/WhatsApp: [请联系我们]
 邮箱: [请联系我们]"""
-    else:
+
+    elif language == "es":
+        return f"""Subject: Proveedor confiable de {product_name} - {COMPANY_NAME}
+
+Estimado/a {customer_name},
+
+Reciba un cordial saludo desde {COMPANY_NAME}. Me pongo en contacto con usted porque creemos que existe una gran oportunidad de colaboración con {customer_company}.
+
+Somos un fabricante líder de {product_name} y otros productos de acero recubierto, con más de una década de experiencia atendiendo clientes en más de 50 países. Nuestras instalaciones cuentan con líneas de producción de última generación y contamos con certificaciones internacionales ISO, SGS, entre otras.
+
+Nuestras ventajas:
+- Productos de alta calidad con control de calidad riguroso
+- Precios altamente competitivos
+- MOQ flexible y entrega puntual
+- Soporte postventa dedicado
+
+Estaré encantado de proporcionarle especificaciones detalladas del producto, certificaciones y una cotización competitiva. También podemos enviar muestras para su evaluación.
+
+¿Le parecería bien una breve llamada o videollamada para conversar más al respecto?
+
+Quedo a la espera de su respuesta.
+
+Atentamente,
+{COMPANY_NAME}
+Tel/WhatsApp: [Contáctenos]
+Email: [Contáctenos]"""
+
+    elif language == "fr":
+        return f"""Subject: Fournisseur fiable de {product_name} - {COMPANY_NAME}
+
+Cher/Chère {customer_name},
+
+Je vous adresse mes salutations depuis {COMPANY_NAME}. Je vous contacte car nous croyons qu'il existe une belle opportunité de collaboration avec {customer_company}.
+
+Nous sommes un fabricant de premier plan de {product_name} et d'autres produits en acier revêtu, avec plus de dix ans d'expérience au service de clients dans plus de 50 pays. Nos installations sont équipées de lignes de production de pointe et nous détenons les certifications internationales ISO, SGS, entre autres.
+
+Nos avantages :
+- Produits de haute qualité avec un contrôle qualité rigoureux
+- Prix très compétitifs
+- MOQ flexible et livraison ponctuelle
+- Support après-vente dédié
+
+Je serais ravi de vous fournir des spécifications détaillées du produit, des certifications et un devis compétitif. Nous pouvons également envoyer des échantillons pour votre évaluation.
+
+Seriez-vous disponible pour un bref appel ou une visioconférence afin d'en discuter davantage ?
+
+Dans l'attente de votre réponse.
+
+Cordialement,
+{COMPANY_NAME}
+Tél/WhatsApp: [Contactez-nous]
+Email: [Contactez-nous]"""
+
+    elif language == "ar":
+        return f"""Subject: مورد موثوق لـ {product_name} - {COMPANY_NAME}
+
+السيد/السيدة {customer_name} المحترم/ة،
+
+تحية طيبة من {COMPANY_NAME}. نتواصل معكم لأننا نعتقد أن هناك فرصة رائعة للتعاون مع شركة {customer_company}.
+
+نحن من الشركات الرائدة في تصنيع {product_name} ومنتجات الفولاذ المطلية الأخرى، مع أكثر من عشر سنوات من الخبرة في خدمة العملاء في أكثر من 50 دولة. تتميز مرافقنا بخطوط إنتاج متطورة ونحمل شهادات دولية مثل ISO وSGS وغيرها.
+
+مميزاتنا:
+- منتجات عالية الجودة مع رقابة صارمة
+- أسعار تنافسية للغاية
+- حد أدنى مرن للطلب وتسليم في الموعد
+- دعم مخصص لخدمة ما بعد البيع
+
+يسعدنا تزويدكم بالمواصفات التفصيلية للمنتج والشهادات وعرض أسعار تنافسي. يمكننا أيضاً إرسال عينات للتقييم.
+
+هل يمكن ترتيب مكالمة قصيرة أو اجتماع عبر الفيديو لمناقشة المزيد؟
+
+نتطلع للرد عليكم.
+
+مع أطيب التحيات،
+{COMPANY_NAME}
+هاتف/واتساب: [اتصل بنا]
+البريد الإلكتروني: [اتصل بنا]"""
+
+    elif language == "ru":
+        return f"""Subject: Надёжный поставщик {product_name} - {COMPANY_NAME}
+
+Уважаемый/ая {customer_name},
+
+Приветствуем вас из {COMPANY_NAME}! Мы обращаемся к вам, поскольку считаем, что существует отличная возможность для сотрудничества с компанией {customer_company}.
+
+Мы являемся ведущим производителем {product_name} и другой продукции из стали с покрытием, с более чем десятилетним опытом обслуживания клиентов в более чем 50 странах. Наши производственные мощности оснащены современными линиями, и мы имеем международные сертификаты ISO, SGS и другие.
+
+Наши преимущества:
+- Высококачественная продукция с тщательным контролем качества
+- Высококонкурентные цены
+- Гибкий минимальный заказ и своевременная доставка
+- Специализированная послепродажная поддержка
+
+Буду рад предоставить вам подробные спецификации продукции, сертификаты и конкурентное коммерческое предложение. Также можем организовать отправку образцов для оценки.
+
+Не могли бы вы уделить время для краткого звонка или видеовстречи для обсуждения деталей?
+
+С нетерпением жду вашего ответа.
+
+С уважением,
+{COMPANY_NAME}
+Тел/WhatsApp: [Свяжитесь с нами]
+Email: [Свяжитесь с нами]"""
+
+    else:  # English default
         return f"""Subject: Reliable Supplier of {product_name} - {COMPANY_NAME}
 
 Dear {customer_name},
@@ -125,6 +244,7 @@ Email: [Contact Us]"""
 
 def search_and_generate(customer_name, customer_company, product_name, language):
     """Generate development letter using LLM."""
+    client, llm_model = get_llm_client()
     if client is None:
         logger.info("No LLM client available, using fallback template")
         return generate_fallback_letter(customer_name, customer_company, product_name, language)
@@ -142,7 +262,7 @@ Write the email in {lang_name}. Make it personalized, professional, and effectiv
 
     try:
         response = client.chat.completions.create(
-            model=model,
+            model=llm_model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT.format(
                     company_name=COMPANY_NAME,
@@ -195,6 +315,87 @@ def generate():
     except Exception as e:
         logger.exception("Generate endpoint error")
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/api/settings", methods=["GET"])
+def api_get_settings():
+    s = load_settings()
+    return jsonify({
+        "api_key": s.get("api_key", ""),
+        "base_url": s.get("base_url", "https://api.deepseek.com"),
+        "model": s.get("model", "deepseek-chat"),
+        "smtp_server": s.get("smtp_server", "smtp.qq.com"),
+        "smtp_port": s.get("smtp_port", "465"),
+        "smtp_user": s.get("smtp_user", "512464829@qq.com"),
+        "smtp_password": s.get("smtp_password", ""),
+    })
+
+@app.route("/api/settings", methods=["PUT"])
+def api_save_settings():
+    data = request.get_json()
+    s = load_settings()
+    s.update({
+        "api_key": data.get("api_key", s.get("api_key", "")).strip(),
+        "base_url": data.get("base_url", s.get("base_url", "https://api.deepseek.com")).strip(),
+        "model": data.get("model", s.get("model", "deepseek-chat")).strip(),
+        "smtp_server": data.get("smtp_server", s.get("smtp_server", "")).strip(),
+        "smtp_port": data.get("smtp_port", s.get("smtp_port", "465")).strip(),
+        "smtp_user": data.get("smtp_user", s.get("smtp_user", "")).strip(),
+        "smtp_password": data.get("smtp_password", s.get("smtp_password", "")).strip(),
+    })
+    save_settings(s)
+    return jsonify({"status": "ok"})
+
+
+@app.route("/api/send-email", methods=["POST"])
+def api_send_email():
+    """Send the generated letter via SMTP."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    data = request.get_json()
+    to_email = data.get("to_email", "").strip()
+    subject = data.get("subject", "").strip()
+    body = data.get("body", "").strip()
+
+    if not to_email or not body:
+        return jsonify({"success": False, "error": "收件人邮箱和邮件内容不能为空"}), 400
+
+    s = load_settings()
+    smtp_server = s.get("smtp_server", "")
+    smtp_port = int(s.get("smtp_port", "465") or "465")
+    smtp_user = s.get("smtp_user", "")
+    smtp_password = s.get("smtp_password", "")
+
+    if not smtp_server or not smtp_user or not smtp_password:
+        return jsonify({"success": False, "error": "请先点右上角 ⚙ 设置，配置你的发件邮箱（SMTP服务器、账号、授权码）"}), 400
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = smtp_user
+        msg["To"] = to_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain", "utf-8"))
+
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_server, smtp_port, timeout=15) as server:
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_password)
+                server.send_message(msg)
+
+        logger.info(f"Email sent to {to_email}")
+        return jsonify({"success": True, "message": f"邮件已发送至 {to_email}"})
+
+    except smtplib.SMTPAuthenticationError:
+        return jsonify({"success": False, "error": "SMTP 认证失败，请检查邮箱账号和授权码"}), 401
+    except Exception as e:
+        logger.error(f"Send email failed: {e}")
+        return jsonify({"success": False, "error": f"发送失败: {str(e)}"}), 500
 
 
 if __name__ == "__main__":

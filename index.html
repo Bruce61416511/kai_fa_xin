@@ -25,9 +25,51 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .spinner.show{display:block}
 .spinner::before{content:'';display:inline-block;width:16px;height:16px;border:2px solid #6366f1;border-top-color:transparent;border-radius:50%;animation:spin .6s linear infinite;margin-right:8px;vertical-align:middle}
 @keyframes spin{to{transform:rotate(360deg)}}
+.settings-btn{position:fixed;top:16px;right:16px;background:rgba(255,255,255,.15);border:none;border-radius:8px;padding:8px 12px;cursor:pointer;font-size:18px;color:#94a3b8;transition:all .2s;z-index:10}
+.settings-btn:hover{background:rgba(255,255,255,.25);color:#fff}
+.settings-panel{position:fixed;top:0;right:-360px;width:340px;height:100vh;background:#1e293b;padding:24px;transition:right .3s ease;z-index:20;overflow-y:auto;box-shadow:-4px 0 20px rgba(0,0,0,.3)}
+.settings-panel.open{right:0}
+.settings-panel h3{color:#e2e8f0;font-size:16px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
+.settings-panel .close-btn{background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer}
+.settings-panel .close-btn:hover{color:#fff}
+.settings-panel label{display:block;font-size:12px;color:#94a3b8;margin-bottom:4px;margin-top:14px;text-transform:uppercase;letter-spacing:.5px}
+.settings-panel input{width:100%;padding:10px 12px;background:#0f172a;border:1.5px solid #334155;border-radius:8px;color:#e2e8f0;font-size:13px;outline:none;font-family:monospace}
+.settings-panel input:focus{border-color:#6366f1}
+.settings-panel .save-btn{width:100%;margin-top:20px;padding:10px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;transition:opacity .2s}
+.settings-panel .save-btn:hover{opacity:.9}
+.settings-status{font-size:12px;text-align:center;margin-top:10px;min-height:18px}
+.settings-status.ok{color:#34d399}
+.settings-status.err{color:#f87171}
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:15}
+.overlay.show{display:block}
+.send-btn{background:linear-gradient(135deg,#10b981 0%,#059669 100%)!important;margin-top:0}
+.send-status{font-size:13px;text-align:center;margin-top:10px;min-height:20px}
+.send-status.ok{color:#059669}
+.send-status.err{color:#dc2626}
 </style>
 </head>
 <body>
+<button class="settings-btn" id="settingsBtn" title="LLM Settings">&#x2699;</button>
+<div class="overlay" id="overlay"></div>
+<div class="settings-panel" id="settingsPanel">
+<h3>LLM Settings <button class="close-btn" id="closeSettings">&times;</button></h3>
+<label>API Key</label>
+<input type="password" id="cfgApiKey" placeholder="sk-...">
+<label>API Base URL</label>
+<input type="text" id="cfgBaseUrl" placeholder="https://api.deepseek.com">
+<label>Model Name</label>
+<input type="text" id="cfgModel" placeholder="deepseek-chat">
+<label style="margin-top:20px;border-top:1px solid #334155;padding-top:14px">SMTP Server</label>
+<input type="text" id="cfgSmtpServer" placeholder="smtp.qq.com">
+<label>SMTP Port</label>
+<input type="text" id="cfgSmtpPort" placeholder="465">
+<label>SMTP 邮箱账号</label>
+<input type="text" id="cfgSmtpUser" placeholder="512464829@qq.com">
+<label>SMTP 授权码/密码</label>
+<input type="password" id="cfgSmtpPassword" placeholder="授权码">
+<button class="save-btn" id="saveSettings">Save</button>
+<div class="settings-status" id="settingsStatus"></div>
+</div>
 <div class="container">
 <div class="header">
 <h1>📧 开发信智能生成</h1>
@@ -57,18 +99,80 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <option value="ru">Русский 俄语</option>
 </select>
 </div>
+<div class="form-group">
+<label>收件邮箱 / Recipient Email</label>
+<input type="email" id="recipientEmail" placeholder="例: john@abctrading.com">
+</div>
 <button type="submit" class="btn" id="submitBtn">生成开发信</button>
 </form>
 <div class="spinner" id="spinner">正在搜索并生成开发信...</div>
 <div class="result" id="result"></div>
+<div class="send-area" id="sendArea" style="display:none;margin-top:16px">
+<button class="btn send-btn" id="sendEmailBtn">📤 发送邮件</button>
+<div class="send-status" id="sendStatus"></div>
+</div>
 </div>
 <script>
+// ============ SETTINGS PANEL ============
+const settingsBtn=document.getElementById('settingsBtn');
+const settingsPanel=document.getElementById('settingsPanel');
+const overlay=document.getElementById('overlay');
+const closeSettings=document.getElementById('closeSettings');
+const saveSettingsBtn=document.getElementById('saveSettings');
+const settingsStatus=document.getElementById('settingsStatus');
+const cfgApiKey=document.getElementById('cfgApiKey');
+const cfgBaseUrl=document.getElementById('cfgBaseUrl');
+const cfgModel=document.getElementById('cfgModel');
+const cfgSmtpServer=document.getElementById('cfgSmtpServer');
+const cfgSmtpPort=document.getElementById('cfgSmtpPort');
+const cfgSmtpUser=document.getElementById('cfgSmtpUser');
+const cfgSmtpPassword=document.getElementById('cfgSmtpPassword');
+
+function openSettings(){settingsPanel.classList.add('open');overlay.classList.add('show');loadSettings();}
+function closeSettingsPanel(){settingsPanel.classList.remove('open');overlay.classList.remove('show');}
+settingsBtn.addEventListener('click',openSettings);
+closeSettings.addEventListener('click',closeSettingsPanel);
+overlay.addEventListener('click',closeSettingsPanel);
+
+async function loadSettings(){
+  try{
+    const res=await fetch('/api/settings');
+    const data=await res.json();
+    cfgApiKey.value=data.api_key||'';
+    cfgBaseUrl.value=data.base_url||'https://api.deepseek.com';
+    cfgModel.value=data.model||'deepseek-chat';
+    cfgSmtpServer.value=data.smtp_server||'';
+    cfgSmtpPort.value=data.smtp_port||'465';
+    cfgSmtpUser.value=data.smtp_user||'';
+    cfgSmtpPassword.value=data.smtp_password||'';
+  }catch(e){console.error(e)}
+}
+
+saveSettingsBtn.addEventListener('click',async()=>{
+  settingsStatus.textContent='Saving...';settingsStatus.className='settings-status';
+  try{
+    const res=await fetch('/api/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      api_key:cfgApiKey.value.trim(),base_url:cfgBaseUrl.value.trim(),model:cfgModel.value.trim(),
+      smtp_server:cfgSmtpServer.value.trim(),smtp_port:cfgSmtpPort.value.trim(),
+      smtp_user:cfgSmtpUser.value.trim(),smtp_password:cfgSmtpPassword.value.trim()
+    })});
+    if(!res.ok)throw new Error('Save failed');
+    settingsStatus.textContent='Saved!';settingsStatus.className='settings-status ok';
+    setTimeout(()=>{settingsStatus.textContent='';closeSettingsPanel()},1500);
+  }catch(e){settingsStatus.textContent='Error: '+e.message;settingsStatus.className='settings-status err'}
+});
+
+// ============ FORM SUBMIT ============
+let currentLetter='';
+let currentSubject='';
+
 document.getElementById('letterForm').addEventListener('submit',async(e)=>{
 e.preventDefault();
 const btn=document.getElementById('submitBtn');
 const spinner=document.getElementById('spinner');
 const result=document.getElementById('result');
-btn.disabled=true;spinner.classList.add('show');result.classList.remove('show');
+const sendArea=document.getElementById('sendArea');
+btn.disabled=true;spinner.classList.add('show');result.classList.remove('show');sendArea.style.display='none';
 const data={
 customer_name:document.getElementById('customerName').value.trim(),
 customer_company:document.getElementById('customerCompany').value.trim(),
@@ -78,10 +182,34 @@ language:document.getElementById('language').value
 try{
 const res=await fetch('/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
 const json=await res.json();
-if(json.success){result.textContent=json.letter}else{result.textContent='❌ 生成失败: '+(json.error||'未知错误')}
+if(json.success){
+  result.textContent=json.letter;
+  currentLetter=json.letter;
+  // Extract subject line
+  const subjectMatch=json.letter.match(/^(?:Subject|主题)[：:]\s*(.+)/im);
+  currentSubject=subjectMatch?subjectMatch[1].trim():'Business Cooperation';
+  sendArea.style.display='block';
+}else{result.textContent='❌ 生成失败: '+(json.error||'未知错误')}
 result.classList.add('show')
 }catch(err){result.textContent='❌ 网络错误: '+err.message;result.classList.add('show')}
 finally{btn.disabled=false;spinner.classList.remove('show')}
+})
+
+// ============ SEND EMAIL ============
+document.getElementById('sendEmailBtn').addEventListener('click',async()=>{
+  const toEmail=document.getElementById('recipientEmail').value.trim();
+  const sendBtn=document.getElementById('sendEmailBtn');
+  const sendStatus=document.getElementById('sendStatus');
+  if(!toEmail){sendStatus.textContent='请先填写收件邮箱';sendStatus.className='send-status err';return}
+  if(!currentLetter){sendStatus.textContent='请先生成开发信';sendStatus.className='send-status err';return}
+  sendBtn.disabled=true;sendStatus.textContent='正在发送...';sendStatus.className='send-status';
+  try{
+    const res=await fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({to_email:toEmail,subject:currentSubject,body:currentLetter})});
+    const json=await res.json();
+    if(json.success){sendStatus.textContent='✅ '+json.message;sendStatus.className='send-status ok'}
+    else{sendStatus.textContent='❌ '+json.error;sendStatus.className='send-status err'}
+  }catch(e){sendStatus.textContent='❌ 发送失败: '+e.message;sendStatus.className='send-status err'}
+  finally{sendBtn.disabled=false}
 })
 </script>
 </body>
